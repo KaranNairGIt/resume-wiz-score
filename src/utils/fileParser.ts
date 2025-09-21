@@ -1,3 +1,5 @@
+import * as mammoth from 'mammoth';
+
 export const parseFile = async (file: File): Promise<string> => {
   const fileType = file.type;
   const fileName = file.name.toLowerCase();
@@ -34,106 +36,31 @@ const parseTextFile = async (file: File): Promise<string> => {
 };
 
 const parsePDFFile = async (file: File): Promise<string> => {
-  // For browser-based PDF parsing, we'll use a simple approach
-  // In a production app, you might want to use PDF.js or send to a server
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        // For now, we'll extract basic text content
-        // This is a simplified approach - in production, use PDF.js
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const text = extractTextFromPDFBuffer(uint8Array);
-        resolve(text);
-      } catch (error) {
-        reject(new Error('Failed to parse PDF file'));
-      }
-    };
-    reader.onerror = () => reject(new Error('Failed to read PDF file'));
-    reader.readAsArrayBuffer(file);
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Use pdf-parse library for proper PDF text extraction
+      const pdfParse = await import('pdf-parse');
+      const arrayBuffer = await file.arrayBuffer();
+      const data = await pdfParse.default(arrayBuffer);
+      resolve(data.text || 'No text content found in PDF');
+    } catch (error) {
+      console.error('PDF parsing error:', error);
+      reject(new Error('Failed to parse PDF file. Please ensure the PDF contains text content.'));
+    }
   });
 };
 
 const parseDOCXFile = async (file: File): Promise<string> => {
-  // For browser-based DOCX parsing, we'll use a simple approach
-  // In production, you might want to use mammoth.js properly or send to server
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        // Simplified DOCX text extraction
-        const text = extractTextFromDOCXBuffer(arrayBuffer);
-        resolve(text);
-      } catch (error) {
-        reject(new Error('Failed to parse DOCX file'));
-      }
-    };
-    reader.onerror = () => reject(new Error('Failed to read DOCX file'));
-    reader.readAsArrayBuffer(file);
+  return new Promise(async (resolve, reject) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      resolve(result.value || 'No text content found in DOCX');
+    } catch (error) {
+      console.error('DOCX parsing error:', error);
+      reject(new Error('Failed to parse DOCX file. Please ensure the file is a valid Word document.'));
+    }
   });
 };
 
-// Simplified text extraction functions
-// In production, use proper libraries like PDF.js and mammoth.js
-const extractTextFromPDFBuffer = (buffer: Uint8Array): string => {
-  let text = '';
-  const decoder = new TextDecoder('utf-8');
-  const content = decoder.decode(buffer);
-  
-  // Very basic text extraction from PDF
-  // This is a fallback - recommend using PDF.js in production
-  const textRegex = /BT\s*.*?ET/g;
-  const matches = content.match(textRegex);
-  
-  if (matches) {
-    matches.forEach(match => {
-      const cleanText = match
-        .replace(/BT\s*/, '')
-        .replace(/ET/, '')
-        .replace(/Tf\s*/, '')
-        .replace(/Td\s*/, ' ')
-        .replace(/Tj\s*/, ' ')
-        .replace(/TJ\s*/, ' ')
-        .replace(/[()]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      text += cleanText + ' ';
-    });
-  }
-  
-  // If no text extracted, return a message
-  if (!text.trim()) {
-    text = 'PDF content detected but text extraction limited. For best results, please use a text-based PDF or convert to DOCX/TXT format.';
-  }
-  
-  return text.trim();
-};
-
-const extractTextFromDOCXBuffer = (buffer: ArrayBuffer): string => {
-  // Very basic DOCX text extraction
-  // In production, use mammoth.js for proper extraction
-  const decoder = new TextDecoder('utf-8');
-  let content = '';
-  
-  try {
-    content = decoder.decode(buffer);
-  } catch {
-    // Try with different encoding
-    content = new TextDecoder('latin1').decode(buffer);
-  }
-  
-  // Extract text content from XML-like structure
-  let text = content
-    .replace(/<[^>]*>/g, ' ') // Remove XML tags
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .trim();
-  
-  // If no meaningful text extracted, return a message
-  if (!text || text.length < 50) {
-    text = 'DOCX content detected but text extraction limited. For best results, please save as TXT format or copy-paste the content.';
-  }
-  
-  return text;
-};
+// Text extraction now uses proper libraries (pdf-parse and mammoth)
